@@ -33,6 +33,7 @@ card._hass = {
 };
 
 const data = card.collectData();
+const renderSignature = card.renderSignature(data);
 assert.equal(data.devices.length, 1);
 assert.equal(data.online, 1);
 assert.equal(data.clients, 6);
@@ -41,5 +42,8 @@ assert.equal(data.devices[0].kind, "gateway");
 assert.equal(data.devices[0].metrics.length, 2);
 assert.equal(card.statusFor({ state: "unavailable" }), "offline");
 assert.equal(card.toMbps({ state: "125000", attributes: { unit_of_measurement: "B/s" } }), 1);
+
+card._hass.states["sensor.udm_device_clients"].state = "7";
+assert.equal(card.renderSignature(card.collectData()), renderSignature, "state changes must not rebuild the animated scene");
 
 console.log("UniFi Orbit smoke test passed");

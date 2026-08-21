@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.1.1";
+const CARD_VERSION = "0.1.2";
 
 const DEFAULTS = {
   title: "UniFi Orbit",
@@ -136,6 +136,7 @@ class UnifiOrbitCard extends HTMLElement {
     this._hass = null;
     this._selectedDevice = null;
     this._samples = [];
+    this._renderSignature = null;
     this._root = this.attachShadow({ mode: "open" });
   }
 
@@ -147,6 +148,7 @@ class UnifiOrbitCard extends HTMLElement {
       max_devices: Math.max(1, Math.min(24, Number(config.max_devices) || DEFAULTS.max_devices)),
       entities: Array.isArray(config.entities) ? config.entities : [],
     };
+    this._renderSignature = null;
     this.render();
   }
 
@@ -173,8 +175,76 @@ class UnifiOrbitCard extends HTMLElement {
   render() {
     if (!this._root || !this._hass) return;
     const data = this.collectData();
+    const signature = this.renderSignature(data);
+    if (this._renderSignature === signature && this._root.querySelector(".orbit-card")) {
+      this.updateLiveData(data);
+      return;
+    }
+    this._renderSignature = signature;
     this._root.innerHTML = `<style>${STYLES}</style>${this.renderCard(data)}`;
     this.bindEvents(data);
+  }
+
+  renderSignature(data) {
+    const devices = data.devices.map((device) => ({
+      id: device.id,
+      name: device.name,
+      model: device.model,
+      kind: device.kind,
+      actions: device.actions.map(({ entry }) => entry.entity_id),
+    }));
+    return JSON.stringify({
+      title: this._config.title,
+      theme: this._config.theme,
+      max_devices: this._config.max_devices,
+      show_clients: this._config.show_clients,
+      show_traffic: this._config.show_traffic,
+      show_updates: this._config.show_updates,
+      selected: this._selectedDevice,
+      entries: data.entries.map(({ entry }) => entry.entity_id),
+      devices,
+    });
+  }
+
+  updateLiveData(data) {
+    const total = data.devices.length;
+    const status = total && data.online === total ? "All systems nominal" : total ? `${data.online}/${total} nodes online` : "Waiting for UniFi entities";
+    const setText = (selector, value) => {
+      const element = this._root.querySelector(selector);
+      if (element) element.textContent = value;
+    };
+    const setClass = (selector, className) => {
+      const element = this._root.querySelector(selector);
+      if (element) element.className = className;
+    };
+
+    setText('[data-bind="subtitle"]', status);
+    setText('[data-bind="live-label"]', data.online ? "LIVE" : "STANDBY");
+    setText('[data-bind="nodes"]', `${data.online} / ${total}`);
+    setText('[data-bind="clients"]', this.formatNumber(data.clients));
+    setText('[data-bind="rx"]', this.rate(data.traffic.rx));
+    setText('[data-bind="tx"]', this.rate(data.traffic.tx));
+    setText('[data-bind="updates"]', data.updates ? `${data.updates} ready` : "Up to date");
+    setText('[data-bind="entries"]', `${data.entries.length} entities observed · local state only`);
+    setClass('[data-bind="nodes"]', `stat-value ${data.online === total && total ? "good" : ""}`);
+    setClass('[data-bind="updates"]', `stat-value ${data.updates ? "warn" : "good"}`);
+
+    for (const device of data.devices) {
+      const node = this._root.querySelector(`[data-device="${this.escapeSelector(device.id)}"]`);
+      if (!node) continue;
+      node.classList.remove("online", "offline", "pending", "provisioning", "upgrading", "unknown");
+      node.classList.add(device.status);
+      const state = node.querySelector("[data-node-state]");
+      if (state) state.textContent = device.status;
+    }
+
+    const selected = data.devices.find((device) => device.id === this._selectedDevice);
+    const detailStatus = this._root.querySelector("[data-detail-status]");
+    if (detailStatus && selected) detailStatus.textContent = `${selected.model} · ${selected.status}`;
+  }
+
+  escapeSelector(value) {
+    return String(value ?? "").replace(/([\\"'\[\]#.:>+~*(),=])/g, "\\$1");
   }
 
   collectData() {
@@ -295,16 +365,16 @@ class UnifiOrbitCard extends HTMLElement {
     const selected = data.devices.find((device) => device.id === this._selectedDevice);
     return `<ha-card class="orbit-card" data-theme="${this.escape(this._config.theme)}">
       <div class="noise"></div>
-      <div class="header"><div><div class="eyebrow">Network observatory · v${CARD_VERSION}</div><h2>${this.escape(this._config.title)}</h2><div class="subtitle">${this.escape(status)}</div></div><div class="live"><span class="live-dot"></span>${data.online ? "LIVE" : "STANDBY"}</div></div>
+      <div class="header"><div><div class="eyebrow">Network observatory · v${CARD_VERSION}</div><h2>${this.escape(this._config.title)}</h2><div class="subtitle" data-bind="subtitle">${this.escape(status)}</div></div><div class="live"><span class="live-dot"></span><span data-bind="live-label">${data.online ? "LIVE" : "STANDBY"}</span></div></div>
       <div class="summary">
-        <div class="stat"><div class="stat-label">Nodes</div><div class="stat-value ${data.online === total && total ? "good" : ""}">${data.online}<span class="muted"> / ${total}</span></div></div>
-        ${this._config.show_clients ? `<div class="stat"><div class="stat-label">Active clients</div><div class="stat-value">${this.formatNumber(data.clients)}</div></div>` : ""}
-        ${this._config.show_traffic ? `<div class="stat"><div class="stat-label">Traffic</div><div class="stat-value">↓ ${this.rate(data.traffic.rx)} <span class="muted">↑ ${this.rate(data.traffic.tx)}</span></div></div>` : ""}
-        ${this._config.show_updates ? `<div class="stat"><div class="stat-label">Firmware</div><div class="stat-value ${data.updates ? "warn" : "good"}">${data.updates ? `${data.updates} ready` : "Up to date"}</div></div>` : ""}
+        <div class="stat"><div class="stat-label">Nodes</div><div data-bind="nodes" class="stat-value ${data.online === total && total ? "good" : ""}">${data.online} / ${total}</div></div>
+        ${this._config.show_clients ? `<div class="stat"><div class="stat-label">Active clients</div><div data-bind="clients" class="stat-value">${this.formatNumber(data.clients)}</div></div>` : ""}
+        ${this._config.show_traffic ? `<div class="stat"><div class="stat-label">Traffic</div><div class="stat-value">↓ <span data-bind="rx">${this.rate(data.traffic.rx)}</span> <span class="muted">↑ <span data-bind="tx">${this.rate(data.traffic.tx)}</span></span></div></div>` : ""}
+        ${this._config.show_updates ? `<div class="stat"><div class="stat-label">Firmware</div><div data-bind="updates" class="stat-value ${data.updates ? "warn" : "good"}">${data.updates ? `${data.updates} ready` : "Up to date"}</div></div>` : ""}
       </div>
       ${stage}
       ${selected ? this.renderDetails(selected) : ""}
-      <div class="footer"><span>${data.entries.length} entities observed · local state only</span><button data-clear-selection>${selected ? "Close details" : "Auto-discovery active"}</button></div>
+      <div class="footer"><span data-bind="entries">${data.entries.length} entities observed · local state only</span><button data-clear-selection>${selected ? "Close details" : "Auto-discovery active"}</button></div>
     </ha-card>`;
   }
 
@@ -320,7 +390,7 @@ class UnifiOrbitCard extends HTMLElement {
       const point = positions[index];
       const selected = device.id === this._selectedDevice ? " selected" : "";
       return `<button class="node ${device.status}${selected}" data-device="${this.escape(device.id)}" style="--x:${point.x};--y:${point.y};animation-delay:${index * 55}ms" aria-label="${this.escape(device.name)}">
-        <span class="node-head"><span class="node-icon">${this.iconFor(device.kind)}</span><span class="node-name">${this.escape(device.name)}</span></span><span class="node-kind">${this.escape(device.kind)}</span><span class="node-state"><span class="state-dot"></span>${this.escape(device.status)}</span>
+        <span class="node-head"><span class="node-icon">${this.iconFor(device.kind)}</span><span class="node-name">${this.escape(device.name)}</span></span><span class="node-kind">${this.escape(device.kind)}</span><span class="node-state"><span class="state-dot"></span><span data-node-state>${this.escape(device.status)}</span></span>
       </button>`;
     }).join("");
     return `<div class="stage"><svg class="orbit-svg" viewBox="0 0 100 100" aria-hidden="true"><circle class="orbit-ring" cx="50" cy="50" r="26"/><circle class="orbit-ring two" cx="50" cy="50" r="38"/><circle class="orbit-ring three" cx="50" cy="50" r="46"/>${links}</svg><div class="core"><div class="core-inner"><div class="core-icon">⌁</div><div class="core-name">UniFi</div><div class="core-meta">controller pulse</div></div></div>${nodes}</div>`;
@@ -333,7 +403,7 @@ class UnifiOrbitCard extends HTMLElement {
       const label = domain === "button" ? this.friendlyAction(entry) : `Toggle ${this.friendlyAction(entry)}`;
       return `<button class="action" data-action-domain="${domain}" data-action-entity="${this.escape(entry.entity_id)}">${this.escape(label)}</button>`;
     }).join("") : `<div class="detail-muted">No control entities available.</div>`;
-    return `<section class="details"><div><h3>${this.escape(device.name)}</h3><div class="detail-muted">${this.escape(device.model)} · ${this.escape(device.status)}</div><div class="metrics">${metrics}</div>${this.renderSparkline()}</div><div><h3>Actions</h3><div class="detail-muted">Only entities exposed by your UniFi permissions appear here.</div><div class="actions" style="margin-top:12px">${actions}</div></div></section>`;
+    return `<section class="details"><div><h3>${this.escape(device.name)}</h3><div class="detail-muted" data-detail-status>${this.escape(device.model)} · ${this.escape(device.status)}</div><div class="metrics">${metrics}</div>${this.renderSparkline()}</div><div><h3>Actions</h3><div class="detail-muted">Only entities exposed by your UniFi permissions appear here.</div><div class="actions" style="margin-top:12px">${actions}</div></div></section>`;
   }
 
   renderSparkline() {
@@ -347,6 +417,7 @@ class UnifiOrbitCard extends HTMLElement {
   bindEvents(data) {
     this._root.querySelectorAll("[data-device]").forEach((node) => node.addEventListener("click", () => {
       this._selectedDevice = node.dataset.device === this._selectedDevice ? null : node.dataset.device;
+      this._renderSignature = null;
       this.render();
     }));
     this._root.querySelectorAll("[data-action-entity]").forEach((button) => button.addEventListener("click", (event) => {
@@ -356,7 +427,7 @@ class UnifiOrbitCard extends HTMLElement {
       if (!this._hass?.callService || !entityId) return;
       this._hass.callService(domain, domain === "button" ? "press" : "toggle", { entity_id: entityId });
     }));
-    this._root.querySelector("[data-clear-selection]")?.addEventListener("click", () => { this._selectedDevice = null; this.render(); });
+    this._root.querySelector("[data-clear-selection]")?.addEventListener("click", () => { this._selectedDevice = null; this._renderSignature = null; this.render(); });
   }
 
   positions(count) {
