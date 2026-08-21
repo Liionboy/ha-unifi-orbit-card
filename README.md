@@ -1,6 +1,6 @@
 # UniFi Orbit Card
 
-Current release: `v0.1.1`
+Next release: `v0.1.3`
 
 An animated Home Assistant Lovelace card for the official UniFi Network integration.
 
@@ -48,7 +48,7 @@ The visual editor exposes the common settings:
 ```yaml
 type: custom:unifi-orbit-card
 title: Home Network
-theme: aurora # aurora, ember, mono
+theme: auto # auto, light, dark
 auto_discover: true
 max_devices: 8
 show_clients: true
@@ -70,6 +70,12 @@ entities:
 ```
 
 An explicit list is also useful for a focused card that shows only one site or a subset of devices.
+
+## Visual themes
+
+The default `auto` theme follows Home Assistant's active card background, text, divider, accent, status colors, and native interface font. This keeps the card aligned with both light and dark HA themes, including custom themes. `light` and `dark` are available when the card should stay independent from the dashboard theme.
+
+The typography intentionally follows Home Assistant's native font stack, like the Shelly Smart Meter Card. UniFi-specific colors are limited to status accents and the animated network links.
 
 ## Design notes
 

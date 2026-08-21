@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.1.2";
+const CARD_VERSION = "0.1.3";
 
 const DEFAULTS = {
   title: "UniFi Orbit",
@@ -8,7 +8,7 @@ const DEFAULTS = {
   show_clients: true,
   show_traffic: true,
   show_updates: true,
-  theme: "aurora",
+  theme: "auto",
 };
 
 const TECHNICAL_KEYS = new Set([
@@ -36,83 +36,85 @@ const STATUS_WORDS = {
 };
 
 const STYLES = `
-  :host { display: block; color: var(--primary-text-color, #f5f7ff); }
+  :host { display: block; color: var(--primary-text-color); font: inherit; }
   ha-card.orbit-card {
-    --orbit-bg: #07101f;
-    --orbit-panel: rgba(11, 24, 45, .74);
-    --orbit-line: rgba(148, 183, 231, .16);
-    --orbit-text: #f5f7ff;
-    --orbit-muted: #95a6c4;
-    --orbit-accent: #66e3ff;
-    --orbit-accent-2: #8d7dff;
-    --orbit-good: #72f0b4;
-    --orbit-warn: #ffd47a;
-    --orbit-bad: #ff718b;
+    --orbit-bg: var(--card-background-color, var(--ha-card-background, #ffffff));
+    --orbit-surface: var(--secondary-background-color, var(--card-background-color, #f6f7f9));
+    --orbit-line: var(--divider-color, rgba(0, 0, 0, .12));
+    --orbit-text: var(--primary-text-color, #202124);
+    --orbit-muted: var(--secondary-text-color, #6b7280);
+    --orbit-accent: var(--accent-color, var(--primary-color, #03a9f4));
+    --orbit-accent-2: var(--info-color, var(--primary-color, #0288d1));
+    --orbit-good: var(--success-color, #2e9d62);
+    --orbit-warn: var(--warning-color, #c98500);
+    --orbit-bad: var(--error-color, #d64545);
     position: relative;
     overflow: hidden;
-    border-radius: 26px;
+    border-radius: 16px;
     padding: 0;
     background: var(--orbit-bg);
     color: var(--orbit-text);
     isolation: isolate;
+    font: inherit;
   }
-  ha-card.orbit-card[data-theme="ember"] { --orbit-accent: #ffb36b; --orbit-accent-2: #ff6d9b; --orbit-good: #b6f47b; }
-  ha-card.orbit-card[data-theme="mono"] { --orbit-accent: #d9e4ff; --orbit-accent-2: #8da4c9; --orbit-good: #d2f5df; }
+  ha-card.orbit-card[data-theme="light"] { --orbit-bg: #ffffff; --orbit-surface: #f6f7f9; --orbit-line: rgba(32, 33, 36, .12); --orbit-text: #202124; --orbit-muted: #6b7280; --orbit-accent: #0288d1; --orbit-accent-2: #546e7a; }
+  ha-card.orbit-card[data-theme="dark"] { --orbit-bg: #1c1c1e; --orbit-surface: #252529; --orbit-line: rgba(255, 255, 255, .1); --orbit-text: #f5f5f7; --orbit-muted: #a1a1aa; --orbit-accent: #64b5f6; --orbit-accent-2: #90a4ae; --orbit-good: #65c98b; --orbit-warn: #f2bd58; --orbit-bad: #f07171; }
   .noise, .noise::after { position: absolute; inset: 0; pointer-events: none; z-index: -1; }
-  .noise { background: radial-gradient(circle at 12% 8%, rgba(102, 227, 255, .14), transparent 26%), radial-gradient(circle at 90% 88%, rgba(141, 125, 255, .18), transparent 30%), linear-gradient(135deg, rgba(255,255,255,.025), transparent 42%); }
-  .noise::after { content: ""; opacity: .1; background-image: linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px); background-size: 34px 34px; mask-image: linear-gradient(to bottom, black, transparent 84%); }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 24px 8px; }
-  .eyebrow { color: var(--orbit-accent); font: 700 .67rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; text-transform: uppercase; }
+  .noise { background: linear-gradient(135deg, color-mix(in srgb, var(--orbit-accent) 7%, transparent), transparent 44%); }
+  .noise::after { content: ""; opacity: .32; background-image: linear-gradient(var(--orbit-line) 1px, transparent 1px), linear-gradient(90deg, var(--orbit-line) 1px, transparent 1px); background-size: 34px 34px; mask-image: linear-gradient(to bottom, black, transparent 78%); }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 18px 20px 8px; }
+  .eyebrow { color: var(--orbit-accent); font-size: .67rem; font-weight: 700; line-height: 1.2; letter-spacing: .12em; text-transform: uppercase; }
   h2, h3, p { margin: 0; }
-  h2 { margin-top: 5px; font-size: clamp(1.15rem, 2vw, 1.45rem); letter-spacing: -.025em; }
+  h2 { margin-top: 5px; font-size: clamp(1.1rem, 2vw, 1.35rem); letter-spacing: -.02em; }
   .subtitle { color: var(--orbit-muted); font-size: .78rem; margin-top: 5px; }
-  .live { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgba(114,240,180,.27); border-radius: 999px; color: var(--orbit-good); background: rgba(114,240,180,.08); font-size: .72rem; font-weight: 700; white-space: nowrap; }
+  .live { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--orbit-good) 34%, var(--orbit-line)); border-radius: 999px; color: var(--orbit-good); background: color-mix(in srgb, var(--orbit-good) 10%, transparent); font-size: .72rem; font-weight: 700; white-space: nowrap; }
   .live-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 0 currentColor; animation: live-pulse 2s infinite; }
-  .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 9px 24px 18px; }
-  .stat { padding: 11px 12px; min-width: 0; border: 1px solid rgba(148,183,231,.12); border-radius: 15px; background: rgba(255,255,255,.045); backdrop-filter: blur(12px); }
-  .stat-label { color: var(--orbit-muted); font-size: .67rem; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .stat-value { margin-top: 5px; color: var(--orbit-text); font-size: 1.06rem; font-weight: 750; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; padding: 9px 20px 16px; }
+  .stat { padding: 10px 11px; min-width: 0; border: 1px solid var(--orbit-line); border-radius: 12px; background: var(--orbit-surface); }
+  .stat-label { color: var(--orbit-muted); font-size: .67rem; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat-value { margin-top: 5px; color: var(--orbit-text); font-size: 1rem; font-weight: 700; letter-spacing: -.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stat-value.good { color: var(--orbit-good); }
   .stat-value.warn { color: var(--orbit-warn); }
-  .stage { position: relative; height: clamp(280px, 38vw, 390px); margin: 0 14px; overflow: hidden; border: 1px solid rgba(148,183,231,.13); border-radius: 23px; background: radial-gradient(circle at center, rgba(39,84,137,.28), rgba(3,10,21,.15) 42%, rgba(2,7,15,.42)); }
-  .stage::before { content: ""; position: absolute; width: 47%; aspect-ratio: 1; left: 26.5%; top: 17%; border-radius: 50%; background: rgba(70, 180, 255, .12); filter: blur(32px); animation: breathe 5s ease-in-out infinite; }
+  .muted { color: var(--orbit-muted); font-weight: 500; }
+  .stage { position: relative; height: clamp(280px, 38vw, 390px); margin: 0 12px; overflow: hidden; border: 1px solid var(--orbit-line); border-radius: 16px; background: var(--orbit-surface); }
+  .stage::before { content: ""; position: absolute; width: 47%; aspect-ratio: 1; left: 26.5%; top: 17%; border-radius: 50%; background: color-mix(in srgb, var(--orbit-accent) 10%, transparent); filter: blur(32px); animation: breathe 5s ease-in-out infinite; }
   .orbit-svg { position: absolute; inset: 2%; width: 96%; height: 96%; overflow: visible; }
   .orbit-ring { fill: none; stroke: var(--orbit-line); stroke-width: .3; stroke-dasharray: 1 2; transform-origin: 50px 50px; animation: orbit-spin 28s linear infinite; }
-  .orbit-ring.two { stroke: rgba(141,125,255,.18); animation-duration: 42s; animation-direction: reverse; }
-  .orbit-ring.three { stroke: rgba(102,227,255,.1); animation-duration: 66s; }
-  .link { stroke: rgba(148,183,231,.2); stroke-width: .24; stroke-dasharray: 1.2 1.4; animation: flow 2.8s linear infinite; }
-  .link.offline { stroke: rgba(255,113,139,.32); stroke-dasharray: .3 2.2; animation-duration: 7s; }
+  .orbit-ring.two { stroke: color-mix(in srgb, var(--orbit-accent-2) 35%, var(--orbit-line)); animation-duration: 42s; animation-direction: reverse; }
+  .orbit-ring.three { stroke: color-mix(in srgb, var(--orbit-accent) 25%, var(--orbit-line)); animation-duration: 66s; }
+  .link { stroke: color-mix(in srgb, var(--orbit-accent-2) 42%, var(--orbit-line)); stroke-width: .24; stroke-dasharray: 1.2 1.4; animation: flow 2.8s linear infinite; }
+  .link.offline { stroke: color-mix(in srgb, var(--orbit-bad) 60%, var(--orbit-line)); stroke-dasharray: .3 2.2; animation-duration: 7s; }
   .packet { fill: var(--orbit-accent); filter: drop-shadow(0 0 2px var(--orbit-accent)); animation: packet-travel 2.8s linear infinite; }
   .packet.p2 { animation-delay: -1.25s; fill: var(--orbit-accent-2); }
-  .core { position: absolute; left: 50%; top: 50%; width: 112px; height: 112px; transform: translate(-50%, -50%); display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(102,227,255,.45); background: radial-gradient(circle at 35% 30%, rgba(102,227,255,.45), rgba(20,43,77,.92) 62%); box-shadow: 0 0 0 8px rgba(102,227,255,.035), 0 0 36px rgba(102,227,255,.22), inset 0 0 24px rgba(102,227,255,.2); z-index: 2; animation: core-float 5s ease-in-out infinite; }
+  .core { position: absolute; left: 50%; top: 50%; width: 108px; height: 108px; transform: translate(-50%, -50%); display: grid; place-items: center; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--orbit-accent) 55%, var(--orbit-line)); background: var(--orbit-bg); box-shadow: 0 0 0 8px color-mix(in srgb, var(--orbit-accent) 7%, transparent), 0 0 28px color-mix(in srgb, var(--orbit-accent) 20%, transparent), inset 0 0 18px color-mix(in srgb, var(--orbit-accent) 10%, transparent); z-index: 2; animation: core-float 5s ease-in-out infinite; }
   .core-inner { text-align: center; }
-  .core-icon { font-size: 1.55rem; line-height: 1; }
+  .core-icon { color: var(--orbit-accent); font-size: 1.5rem; line-height: 1; }
   .core-name { margin-top: 6px; font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
   .core-meta { margin-top: 3px; color: var(--orbit-muted); font-size: .62rem; }
-  .node { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); transform: translate(-50%, -50%); min-width: 87px; max-width: 118px; padding: 8px 9px; border: 1px solid rgba(148,183,231,.21); border-radius: 14px; background: rgba(10, 23, 42, .9); box-shadow: 0 8px 20px rgba(0,0,0,.22); cursor: pointer; z-index: 3; transition: transform .22s ease, border-color .22s ease, background .22s ease; animation: node-in .55s both; }
-  .node:hover, .node.selected { transform: translate(-50%, -50%) scale(1.06); border-color: var(--orbit-accent); background: rgba(20, 44, 74, .96); }
+  .node { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); transform: translate(-50%, -50%); min-width: 87px; max-width: 118px; padding: 8px 9px; border: 1px solid var(--orbit-line); border-radius: 12px; background: var(--orbit-bg); box-shadow: 0 8px 20px color-mix(in srgb, var(--primary-text-color) 12%, transparent); cursor: pointer; z-index: 3; transition: transform .22s ease, border-color .22s ease, background .22s ease; animation: node-in .55s both; font: inherit; text-align: left; }
+  .node:hover, .node.selected { transform: translate(-50%, -50%) scale(1.06); border-color: var(--orbit-accent); background: var(--orbit-surface); }
   .node-head { display: flex; align-items: center; gap: 6px; }
-  .node-icon { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 8px; background: rgba(102,227,255,.13); color: var(--orbit-accent); font-size: .84rem; }
-  .node.online .node-icon { box-shadow: 0 0 0 3px rgba(114,240,180,.05); }
-  .node.offline .node-icon { color: var(--orbit-bad); background: rgba(255,113,139,.11); }
-  .node-name { min-width: 0; font-size: .69rem; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .node-icon { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: color-mix(in srgb, var(--orbit-accent) 12%, transparent); color: var(--orbit-accent); font-size: .84rem; }
+  .node.online .node-icon { box-shadow: 0 0 0 3px color-mix(in srgb, var(--orbit-good) 10%, transparent); }
+  .node.offline .node-icon { color: var(--orbit-bad); background: color-mix(in srgb, var(--orbit-bad) 12%, transparent); }
+  .node-name { min-width: 0; color: var(--orbit-text); font-size: .69rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .node-kind { margin-top: 5px; color: var(--orbit-muted); font-size: .6rem; text-transform: uppercase; letter-spacing: .06em; }
   .node-state { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--orbit-good); font-size: .61rem; }
   .node.offline .node-state { color: var(--orbit-bad); }
   .state-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-  .details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin: 14px 14px 0; padding: 16px; border: 1px solid rgba(148,183,231,.14); border-radius: 20px; background: rgba(7, 17, 32, .55); animation: reveal .3s ease both; }
+  .details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin: 12px 12px 0; padding: 14px; border: 1px solid var(--orbit-line); border-radius: 14px; background: var(--orbit-surface); animation: reveal .3s ease both; }
   .details h3 { font-size: .86rem; }
   .detail-muted { margin-top: 3px; color: var(--orbit-muted); font-size: .68rem; }
   .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 12px; }
-  .metric { padding: 8px 9px; border-radius: 11px; background: rgba(255,255,255,.045); }
+  .metric { padding: 8px 9px; border-radius: 10px; background: var(--orbit-bg); border: 1px solid var(--orbit-line); }
   .metric-label { color: var(--orbit-muted); font-size: .61rem; }
-  .metric-value { margin-top: 3px; font-size: .76rem; font-weight: 700; overflow-wrap: anywhere; }
+  .metric-value { margin-top: 3px; color: var(--orbit-text); font-size: .76rem; font-weight: 700; overflow-wrap: anywhere; }
   .actions { display: flex; flex-wrap: wrap; gap: 7px; align-content: flex-start; }
-  .action { border: 1px solid rgba(102,227,255,.26); border-radius: 10px; padding: 8px 10px; color: var(--orbit-accent); background: rgba(102,227,255,.08); cursor: pointer; font: inherit; font-size: .68rem; }
-  .action:hover { background: rgba(102,227,255,.17); }
+  .action { border: 1px solid color-mix(in srgb, var(--orbit-accent) 38%, var(--orbit-line)); border-radius: 9px; padding: 8px 10px; color: var(--orbit-accent); background: color-mix(in srgb, var(--orbit-accent) 9%, transparent); cursor: pointer; font: inherit; font-size: .68rem; }
+  .action:hover { background: color-mix(in srgb, var(--orbit-accent) 16%, transparent); }
   .sparkline { display: block; width: 100%; height: 42px; margin-top: 10px; overflow: visible; }
-  .sparkline polyline { fill: none; stroke: var(--orbit-accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px var(--orbit-accent)); }
-  .footer { display: flex; justify-content: space-between; gap: 12px; padding: 13px 24px 17px; color: var(--orbit-muted); font-size: .64rem; }
+  .sparkline polyline { fill: none; stroke: var(--orbit-accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .footer { display: flex; justify-content: space-between; gap: 12px; padding: 12px 20px 15px; color: var(--orbit-muted); font-size: .64rem; }
   .footer button { border: 0; padding: 0; color: var(--orbit-accent); background: none; cursor: pointer; font: inherit; }
   .empty { display: grid; place-items: center; min-height: 260px; padding: 28px; text-align: center; color: var(--orbit-muted); }
   .empty strong { display: block; margin-bottom: 8px; color: var(--orbit-text); font-size: .95rem; }
@@ -147,6 +149,7 @@ class UnifiOrbitCard extends HTMLElement {
       ...config,
       max_devices: Math.max(1, Math.min(24, Number(config.max_devices) || DEFAULTS.max_devices)),
       entities: Array.isArray(config.entities) ? config.entities : [],
+      theme: ["auto", "light", "dark"].includes(config.theme) ? config.theme : DEFAULTS.theme,
     };
     this._renderSignature = null;
     this.render();
@@ -363,7 +366,7 @@ class UnifiOrbitCard extends HTMLElement {
     const status = total && data.online === total ? "All systems nominal" : total ? `${data.online}/${total} nodes online` : "Waiting for UniFi entities";
     const stage = total ? this.renderStage(data) : `<div class="empty"><div><strong>No UniFi entities detected</strong>Enable the UniFi Network integration or add entities explicitly in the card editor.</div></div>`;
     const selected = data.devices.find((device) => device.id === this._selectedDevice);
-    return `<ha-card class="orbit-card" data-theme="${this.escape(this._config.theme)}">
+    return `<ha-card class="orbit-card" data-theme="${this.escape(this._config.theme || "auto")}" data-ha-theme="${this.escape(this._config.theme || "auto")}">
       <div class="noise"></div>
       <div class="header"><div><div class="eyebrow">Network observatory · v${CARD_VERSION}</div><h2>${this.escape(this._config.title)}</h2><div class="subtitle" data-bind="subtitle">${this.escape(status)}</div></div><div class="live"><span class="live-dot"></span><span data-bind="live-label">${data.online ? "LIVE" : "STANDBY"}</span></div></div>
       <div class="summary">
@@ -491,7 +494,7 @@ class UnifiOrbitCardEditor extends HTMLElement {
   constructor() { super(); this._root = this.attachShadow({ mode: "open" }); this._config = {}; }
   setConfig(config) { this._config = { ...DEFAULTS, ...config }; this.render(); }
   render() {
-    this._root.innerHTML = `<style>:host{display:block;padding:8px 0} .form{display:grid;gap:14px} label{display:grid;gap:5px;color:var(--primary-text-color);font-size:.85rem} input,select{box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit} .check{display:flex;grid-template-columns:auto 1fr;align-items:center;gap:8px}.check input{width:auto}</style><div class="form"><label>Title<input data-key="title" value="${this.escape(this._config.title)}"></label><label>Theme<select data-key="theme"><option value="aurora">Aurora</option><option value="ember">Ember</option><option value="mono">Monochrome</option></select></label><label>Maximum nodes<input data-key="max_devices" type="number" min="1" max="24" value="${this._config.max_devices}"></label><label class="check"><input data-key="auto_discover" type="checkbox" ${this._config.auto_discover !== false ? "checked" : ""}> Auto-discover UniFi entities</label><label class="check"><input data-key="show_clients" type="checkbox" ${this._config.show_clients !== false ? "checked" : ""}> Show active clients</label><label class="check"><input data-key="show_traffic" type="checkbox" ${this._config.show_traffic !== false ? "checked" : ""}> Show traffic and trend</label><label class="check"><input data-key="show_updates" type="checkbox" ${this._config.show_updates !== false ? "checked" : ""}> Show firmware status</label><p style="margin:0;color:var(--secondary-text-color);font-size:.78rem">For installations without registry discovery, add an <code>entities:</code> list to the YAML configuration.</p></div>`;
+    this._root.innerHTML = `<style>:host{display:block;padding:8px 0;font-family:var(--paper-font-common-base_-_font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif)} .form{display:grid;gap:14px} label{display:grid;gap:5px;color:var(--primary-text-color);font-size:.85rem} input,select{box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit} .check{display:flex;grid-template-columns:auto 1fr;align-items:center;gap:8px}.check input{width:auto}</style><div class="form"><label>Title<input data-key="title" value="${this.escape(this._config.title)}"></label><label>Theme<select data-key="theme"><option value="auto">Follow Home Assistant</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label>Maximum nodes<input data-key="max_devices" type="number" min="1" max="24" value="${this._config.max_devices}"></label><label class="check"><input data-key="auto_discover" type="checkbox" ${this._config.auto_discover !== false ? "checked" : ""}> Auto-discover UniFi entities</label><label class="check"><input data-key="show_clients" type="checkbox" ${this._config.show_clients !== false ? "checked" : ""}> Show active clients</label><label class="check"><input data-key="show_traffic" type="checkbox" ${this._config.show_traffic !== false ? "checked" : ""}> Show traffic and trend</label><label class="check"><input data-key="show_updates" type="checkbox" ${this._config.show_updates !== false ? "checked" : ""}> Show firmware status</label><p style="margin:0;color:var(--secondary-text-color);font-size:.78rem">Auto follows Home Assistant colors and typography. Use an explicit entity list only when registry discovery is unavailable.</p></div>`;
     const theme = this._root.querySelector('[data-key="theme"]'); if (theme) theme.value = this._config.theme;
     this._root.querySelectorAll("[data-key]").forEach((input) => input.addEventListener("change", () => this.changeConfig()));
   }
