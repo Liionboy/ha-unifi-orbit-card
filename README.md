@@ -1,5 +1,7 @@
 # UniFi Orbit Card
 
+Current release: `v0.1.1`
+
 An animated Home Assistant Lovelace card for the official UniFi Network integration.
 
 UniFi Orbit renders the network as a living observatory: gateways, access points, and switches appear as orbiting nodes around a controller pulse. Links flow, packets travel between nodes, and the card adapts to the entities that are actually available in each Home Assistant installation.
