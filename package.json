@@ -1,0 +1,10 @@
+{
+  "name": "ha-unifi-orbit-card",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/unifi-orbit-card.js && node --check unifi-orbit-card.js",
+    "test": "node test/smoke.mjs"
+  }
+}
