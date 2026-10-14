@@ -1,8 +1,10 @@
 # UniFi Orbit Card
 
-Next release: `v0.1.3`
+Latest release: `v0.2.0`
 
 An animated Home Assistant Lovelace card for the official UniFi Network integration.
+
+The package includes two components: **UniFi Orbit Card** for a focused animated card and **UniFi Command Center** for a complete dashboard-style command center with topology, health, traffic, device roster, and contextual actions.
 
 UniFi Orbit renders the network as a living observatory: gateways, access points, and switches appear as orbiting nodes around a controller pulse. Links flow, packets travel between nodes, and the card adapts to the entities that are actually available in each Home Assistant installation.
 
@@ -55,6 +57,18 @@ show_clients: true
 show_traffic: true
 show_updates: true
 ```
+
+For a complete dashboard-style experience, use the second component:
+
+```yaml
+type: custom:unifi-command-center-card
+title: UniFi Command Center
+theme: auto
+auto_discover: true
+max_devices: 24
+```
+
+It renders its own responsive command-center layout with a live topology, health ring, traffic pulse, device roster, and contextual controls.
 
 If automatic registry discovery is not available, use a list of UniFi entity IDs:
 

@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.1.3";
+const CARD_VERSION = "0.2.0";
 
 const DEFAULTS = {
   title: "UniFi Orbit",
@@ -272,6 +272,9 @@ class UnifiOrbitCard extends HTMLElement {
     for (const { entry } of items) {
       if (entry.device_id && this._hass.devices?.[entry.device_id]) {
         const device = this._hass.devices[entry.device_id];
+        // UniFi also registers logical controller and WLAN devices. They carry
+        // useful aggregate sensors, but are not physical nodes in the topology.
+        if (/^unifi\s+(?:network|wlan)$/i.test(device.model || "")) continue;
         const isHardware = /ubiquiti|unifi/i.test(`${device.manufacturer || ""} ${device.model || ""}`) || this.hasHardwareTelemetry(items, entry.device_id);
         if (!isHardware) continue;
         if (!devicesById.has(entry.device_id)) devicesById.set(entry.device_id, { id: entry.device_id, registry: device, entities: [] });
@@ -445,8 +448,8 @@ class UnifiOrbitCard extends HTMLElement {
 
   kindFor(value) {
     if (/gateway|udm|usg|uxg|ucg|dream router|router/i.test(value)) return "gateway";
-    if (/access point|\buap\b|\bu6\b|\bu7\b|beacon|wifi|wireless|mesh/i.test(value)) return "access point";
-    if (/switch|\busw\b|\bus\d|port|poe/i.test(value)) return "switch";
+    if (/access point|\buap\b|\bu[67](?:\w*)|beacon|wifi|wireless|mesh/i.test(value)) return "access point";
+    if (/switch|\busw\b|\bus\d|\bus[a-z0-9]+|port|poe/i.test(value)) return "switch";
     return "device";
   }
 
@@ -507,17 +510,213 @@ class UnifiOrbitCardEditor extends HTMLElement {
   escape(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
 }
 
+const COMMAND_CENTER_STYLES = `
+  :host { display: block; color: var(--primary-text-color); font: inherit; }
+  ha-card.command-center { --cc-bg: var(--card-background-color, #fff); --cc-surface: var(--secondary-background-color, var(--card-background-color, #f7f7f8)); --cc-text: var(--primary-text-color, #202124); --cc-muted: var(--secondary-text-color, #6b7280); --cc-line: var(--divider-color, rgba(0,0,0,.12)); --cc-accent: var(--accent-color, var(--primary-color, #0288d1)); --cc-good: var(--success-color, #2e9d62); --cc-warn: var(--warning-color, #c98500); --cc-bad: var(--error-color, #d64545); display: block; overflow: hidden; border: 1px solid var(--cc-line); border-radius: 22px; background: var(--cc-bg); color: var(--cc-text); font: inherit; }
+  .cc-shell { background: linear-gradient(135deg, color-mix(in srgb, var(--cc-accent) 6%, transparent), transparent 34%); }
+  .cc-header { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 22px 24px 18px; border-bottom: 1px solid var(--cc-line); }
+  .cc-brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .cc-mark { position: relative; display: grid; place-items: center; width: 45px; height: 45px; border: 1px solid color-mix(in srgb, var(--cc-accent) 48%, var(--cc-line)); border-radius: 14px; color: var(--cc-accent); background: color-mix(in srgb, var(--cc-accent) 10%, transparent); font-size: 1.25rem; box-shadow: 0 0 0 6px color-mix(in srgb, var(--cc-accent) 5%, transparent); }
+  .cc-mark::after { content: ""; position: absolute; inset: 7px; border: 1px dashed color-mix(in srgb, var(--cc-accent) 45%, transparent); border-radius: 50%; animation: cc-spin 18s linear infinite; }
+  .cc-eyebrow { color: var(--cc-accent); font-size: .66rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+  .cc-title { margin: 4px 0 0; color: var(--cc-text); font-size: clamp(1.15rem, 2vw, 1.55rem); letter-spacing: -.025em; }
+  .cc-subtitle { margin-top: 4px; color: var(--cc-muted); font-size: .76rem; }
+  .cc-status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid color-mix(in srgb, var(--cc-good) 35%, var(--cc-line)); border-radius: 999px; color: var(--cc-good); background: color-mix(in srgb, var(--cc-good) 9%, transparent); font-size: .7rem; font-weight: 800; white-space: nowrap; }
+  .cc-status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: cc-pulse 2s infinite; }
+  .cc-layout { display: grid; grid-template-columns: 190px minmax(340px, 1fr) 260px; gap: 0; min-height: 490px; }
+  .cc-rail, .cc-roster { padding: 18px; background: color-mix(in srgb, var(--cc-surface) 72%, transparent); }
+  .cc-rail { border-right: 1px solid var(--cc-line); }
+  .cc-roster { border-left: 1px solid var(--cc-line); }
+  .cc-label { color: var(--cc-muted); font-size: .63rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+  .cc-health { display: grid; place-items: center; width: 128px; height: 128px; margin: 17px auto 16px; border: 1px solid color-mix(in srgb, var(--cc-accent) 42%, var(--cc-line)); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--cc-accent) 13%, transparent) 0 48%, transparent 49%), conic-gradient(var(--cc-accent) var(--cc-health, 0%), color-mix(in srgb, var(--cc-line) 60%, transparent) 0); box-shadow: inset 0 0 0 8px var(--cc-bg), 0 0 0 1px var(--cc-line); }
+  .cc-health-inner { display: grid; place-items: center; width: 98px; height: 98px; border-radius: 50%; background: var(--cc-bg); text-align: center; }
+  .cc-health-value { font-size: 1.55rem; font-weight: 800; letter-spacing: -.04em; }
+  .cc-health-caption { margin-top: 2px; color: var(--cc-muted); font-size: .61rem; }
+  .cc-stats { display: grid; gap: 7px; }
+  .cc-stat { padding: 9px 10px; border: 1px solid var(--cc-line); border-radius: 11px; background: var(--cc-bg); }
+  .cc-stat-value { margin-top: 3px; font-size: .92rem; font-weight: 750; }
+  .cc-stat-label { color: var(--cc-muted); font-size: .61rem; }
+  .cc-rail-card { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--cc-line); }
+  .cc-traffic-row { display: grid; grid-template-columns: 25px 1fr auto; align-items: center; gap: 6px; margin-top: 9px; color: var(--cc-muted); font-size: .64rem; }
+  .cc-bar { height: 5px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--cc-line) 60%, transparent); }
+  .cc-bar > span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--cc-accent); transition: width .45s ease; }
+  .cc-bar.tx > span { background: var(--cc-accent-2, var(--cc-good)); }
+  .cc-center { position: relative; min-width: 0; padding: 18px 16px; }
+  .cc-section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .cc-section-title { font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .cc-section-meta { color: var(--cc-muted); font-size: .65rem; }
+  .cc-topology { position: relative; height: 405px; overflow: hidden; border: 1px solid var(--cc-line); border-radius: 17px; background: radial-gradient(circle at center, color-mix(in srgb, var(--cc-accent) 10%, transparent), transparent 42%), var(--cc-bg); }
+  .cc-topology::before { content: ""; position: absolute; inset: 12%; border: 1px dashed color-mix(in srgb, var(--cc-line) 70%, transparent); border-radius: 50%; animation: cc-spin 34s linear infinite; }
+  .cc-topology::after { content: ""; position: absolute; inset: 24%; border: 1px solid color-mix(in srgb, var(--cc-accent) 18%, var(--cc-line)); border-radius: 50%; animation: cc-spin 23s linear infinite reverse; }
+  .cc-svg { position: absolute; inset: 5%; width: 90%; height: 90%; overflow: visible; }
+  .cc-link { stroke: color-mix(in srgb, var(--cc-accent) 44%, var(--cc-line)); stroke-width: .25; stroke-dasharray: 1.1 1.6; animation: cc-flow 2.6s linear infinite; }
+  .cc-link.offline { stroke: var(--cc-bad); stroke-dasharray: .3 2; animation-duration: 7s; }
+  .cc-packet { fill: var(--cc-accent); animation: cc-packet 2.6s linear infinite; }
+  .cc-packet.alt { fill: var(--cc-good); animation-delay: -1.3s; }
+  .cc-core { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 94px; height: 94px; transform: translate(-50%, -50%); border: 1px solid color-mix(in srgb, var(--cc-accent) 55%, var(--cc-line)); border-radius: 50%; background: var(--cc-bg); box-shadow: 0 0 0 8px color-mix(in srgb, var(--cc-accent) 6%, transparent), 0 0 28px color-mix(in srgb, var(--cc-accent) 18%, transparent); z-index: 2; animation: cc-float 5s ease-in-out infinite; }
+  .cc-core-icon { color: var(--cc-accent); font-size: 1.45rem; }
+  .cc-core-name { margin-top: 4px; font-size: .64rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+  .cc-core-meta { margin-top: 2px; color: var(--cc-muted); font-size: .58rem; }
+  .cc-node { position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); display: grid; grid-template-columns: 23px 1fr; gap: 7px; min-width: 92px; max-width: 128px; padding: 8px; transform: translate(-50%, -50%); border: 1px solid var(--cc-line); border-radius: 11px; background: var(--cc-bg); box-shadow: 0 8px 18px color-mix(in srgb, var(--primary-text-color) 12%, transparent); color: var(--cc-text); cursor: pointer; z-index: 3; text-align: left; transition: transform .2s ease, border-color .2s ease, background .2s ease; animation: cc-enter .45s both; font: inherit; }
+  .cc-node:hover, .cc-node.selected { transform: translate(-50%, -50%) scale(1.05); border-color: var(--cc-accent); background: var(--cc-surface); }
+  .cc-node-icon { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 7px; color: var(--cc-accent); background: color-mix(in srgb, var(--cc-accent) 12%, transparent); font-size: .78rem; }
+  .cc-node.offline .cc-node-icon { color: var(--cc-bad); background: color-mix(in srgb, var(--cc-bad) 12%, transparent); }
+  .cc-node-name { overflow: hidden; color: var(--cc-text); font-size: .66rem; font-weight: 750; white-space: nowrap; text-overflow: ellipsis; }
+  .cc-node-kind { margin-top: 3px; overflow: hidden; color: var(--cc-muted); font-size: .57rem; white-space: nowrap; text-overflow: ellipsis; }
+  .cc-node-state { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--cc-good); font-size: .56rem; }
+  .cc-node.offline .cc-node-state { color: var(--cc-bad); }
+  .cc-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .cc-roster-list { display: grid; gap: 6px; max-height: 440px; margin-top: 12px; overflow: auto; }
+  .cc-roster-row { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 7px; width: 100%; padding: 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--cc-text); cursor: pointer; font: inherit; text-align: left; }
+  .cc-roster-row:hover, .cc-roster-row.selected { border-color: var(--cc-line); background: var(--cc-bg); }
+  .cc-roster-icon { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: var(--cc-accent); background: color-mix(in srgb, var(--cc-accent) 10%, transparent); font-size: .7rem; }
+  .cc-roster-name { overflow: hidden; font-size: .65rem; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+  .cc-roster-kind { margin-top: 2px; color: var(--cc-muted); font-size: .57rem; }
+  .cc-roster-status { width: 6px; height: 6px; border-radius: 50%; background: var(--cc-good); }
+  .cc-roster-status.offline { background: var(--cc-bad); }
+  .cc-details { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 13px 18px; border-top: 1px solid var(--cc-line); background: color-mix(in srgb, var(--cc-surface) 70%, transparent); }
+  .cc-detail-title { font-size: .72rem; font-weight: 800; }
+  .cc-detail-sub { margin-top: 3px; color: var(--cc-muted); font-size: .62rem; }
+  .cc-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .cc-action, .cc-clear { padding: 7px 9px; border: 1px solid color-mix(in srgb, var(--cc-accent) 36%, var(--cc-line)); border-radius: 8px; color: var(--cc-accent); background: color-mix(in srgb, var(--cc-accent) 8%, transparent); cursor: pointer; font: inherit; font-size: .62rem; }
+  .cc-action:hover, .cc-clear:hover { background: color-mix(in srgb, var(--cc-accent) 15%, transparent); }
+  .cc-empty { display: grid; place-items: center; height: 100%; padding: 30px; color: var(--cc-muted); text-align: center; font-size: .75rem; }
+  .cc-footer { display: flex; justify-content: space-between; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--cc-line); color: var(--cc-muted); font-size: .61rem; }
+  @keyframes cc-pulse { 0%,100% { box-shadow: 0 0 0 0 currentColor; } 50% { box-shadow: 0 0 0 5px transparent; } }
+  @keyframes cc-spin { to { transform: rotate(360deg); } }
+  @keyframes cc-flow { to { stroke-dashoffset: -5; } }
+  @keyframes cc-packet { 0% { opacity: 0; offset-distance: 0%; } 12%,85% { opacity: 1; } 100% { opacity: 0; offset-distance: 100%; } }
+  @keyframes cc-float { 0%,100% { margin-top: 0; } 50% { margin-top: -4px; } }
+  @keyframes cc-enter { from { opacity: 0; transform: translate(-50%, -50%) scale(.82); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+  @media (max-width: 900px) { .cc-layout { grid-template-columns: 165px minmax(280px, 1fr); } .cc-roster { grid-column: 1 / -1; border-top: 1px solid var(--cc-line); border-left: 0; } .cc-roster-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; } }
+  @media (max-width: 620px) { .cc-header { align-items: flex-start; flex-direction: column; padding: 17px; } .cc-layout { display: block; } .cc-rail, .cc-roster { border: 0; border-bottom: 1px solid var(--cc-line); } .cc-topology { height: 340px; } .cc-roster-list { grid-template-columns: 1fr; } .cc-details { align-items: flex-start; grid-template-columns: 1fr; } .cc-actions { justify-content: flex-start; } .cc-footer { padding-inline: 17px; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+`;
+
+class UnifiCommandCenterCard extends UnifiOrbitCard {
+  constructor() { super(); this._centerSignature = null; }
+
+  setConfig(config) {
+    this._config = {
+      ...DEFAULTS,
+      ...config,
+      title: config?.title || "UniFi Command Center",
+      max_devices: Math.max(1, Math.min(24, Number(config?.max_devices) || 12)),
+      entities: Array.isArray(config?.entities) ? config.entities : [],
+      theme: ["auto", "light", "dark"].includes(config?.theme) ? config.theme : "auto",
+    };
+    this._centerSignature = null;
+    this.render();
+  }
+
+  getCardSize() { return 12; }
+  getGridOptions() { return { rows: 12, columns: 12, min_rows: 8 }; }
+
+  render() {
+    if (!this._root || !this._hass) return;
+    const data = this.collectData();
+    const signature = JSON.stringify({
+      title: this._config.title,
+      theme: this._config.theme,
+      max_devices: this._config.max_devices,
+      selected: this._selectedDevice,
+      entries: data.entries.map(({ entry }) => entry.entity_id),
+      devices: data.devices.map((device) => ({ id: device.id, name: device.name, model: device.model, kind: device.kind, actions: device.actions.map(({ entry }) => entry.entity_id) })),
+    });
+    if (this._centerSignature === signature && this._root.querySelector(".command-center")) {
+      this.updateCenterData(data);
+      return;
+    }
+    this._centerSignature = signature;
+    this._root.innerHTML = `<style>${COMMAND_CENTER_STYLES}</style>${this.renderCenter(data)}`;
+    this.bindCenterEvents();
+  }
+
+  renderCenter(data) {
+    const total = data.devices.length;
+    const health = total ? Math.round((data.online / total) * 100) : 0;
+    const status = total && data.online === total ? "All systems nominal" : total ? `${data.online}/${total} nodes online` : "Waiting for UniFi entities";
+    const selected = data.devices.find((device) => device.id === this._selectedDevice);
+    return `<ha-card class="command-center" data-theme="${this.escape(this._config.theme)}">
+      <div class="cc-shell">
+        <header class="cc-header"><div class="cc-brand"><div class="cc-mark">⌁</div><div><div class="cc-eyebrow">UniFi Network · Command Center</div><h1 class="cc-title">${this.escape(this._config.title)}</h1><p class="cc-subtitle" data-cc-bind="subtitle">${this.escape(status)}</p></div></div><div class="cc-status"><span class="cc-status-dot"></span><span data-cc-bind="live">${data.online ? "LIVE" : "STANDBY"}</span></div></header>
+        <div class="cc-layout">
+          ${this.renderHealthRail(data, health)}
+          <main class="cc-center"><div class="cc-section-head"><span class="cc-section-title">Live topology</span><span class="cc-section-meta" data-cc-bind="entity-count">${data.entries.length} signals · local state</span></div>${this.renderTopology(data)}</main>
+          ${this.renderRoster(data)}
+        </div>
+        ${selected ? this.renderCenterDetails(selected) : ""}
+        <footer class="cc-footer"><span>Auto-discovery active · ${this.escape(this._config.theme === "auto" ? "Home Assistant theme" : `${this._config.theme} theme`)}</span><button class="cc-clear" data-cc-clear>${selected ? "Close details" : "About this view"}</button></footer>
+      </div>
+    </ha-card>`;
+  }
+
+  renderHealthRail(data, health) {
+    return `<aside class="cc-rail"><div class="cc-label">Network health</div><div class="cc-health" style="--cc-health:${health}%"><div class="cc-health-inner"><div><div class="cc-health-value" data-cc-bind="health">${health}%</div><div class="cc-health-caption">availability</div></div></div></div><div class="cc-stats"><div class="cc-stat"><div class="cc-stat-label">Nodes online</div><div class="cc-stat-value" data-cc-bind="nodes">${data.online} / ${data.devices.length}</div></div><div class="cc-stat"><div class="cc-stat-label">Active clients</div><div class="cc-stat-value" data-cc-bind="clients">${this.formatNumber(data.clients)}</div></div><div class="cc-stat"><div class="cc-stat-label">Firmware</div><div class="cc-stat-value" data-cc-bind="updates">${data.updates ? `${data.updates} ready` : "Up to date"}</div></div></div><div class="cc-rail-card"><div class="cc-label">Traffic pulse</div>${this.renderTrafficRow("RX", "rx", data.traffic.rx, "")}${this.renderTrafficRow("TX", "tx", data.traffic.tx, "tx")}</div></aside>`;
+  }
+
+  renderTrafficRow(label, bind, value, className) {
+    return `<div class="cc-traffic-row"><span>${label}</span><div class="cc-bar ${className}"><span data-cc-bar="${bind}" style="width:${Math.min(100, Math.max(4, value))}%"></span></div><strong data-cc-bind="${bind}">${this.rate(value)}</strong></div>`;
+  }
+
+  renderTopology(data) {
+    if (!data.devices.length) return `<div class="cc-topology"><div class="cc-empty">Nu au fost detectate entități UniFi.<br>Activează integrarea UniFi Network sau verifică permisiunile utilizatorului.</div></div>`;
+    const positions = this.positions(data.devices.length);
+    const links = data.devices.map((device, index) => { const point = positions[index]; return `<line class="cc-link ${device.status === "offline" ? "offline" : ""}" x1="50" y1="50" x2="${point.x}" y2="${point.y}"/><circle class="cc-packet" cx="50" cy="50" r=".65"><animateMotion dur="2.6s" repeatCount="indefinite" path="M 0 0 L ${point.x - 50} ${point.y - 50}"/></circle><circle class="cc-packet alt" cx="50" cy="50" r=".45"><animateMotion dur="2.6s" begin="-1.3s" repeatCount="indefinite" path="M 0 0 L ${point.x - 50} ${point.y - 50}"/></circle>`; }).join("");
+    const nodes = data.devices.map((device, index) => { const point = positions[index]; const selected = device.id === this._selectedDevice ? " selected" : ""; return `<button class="cc-node ${device.status}${selected}" data-cc-device="${this.escape(device.id)}" style="--x:${point.x};--y:${point.y};animation-delay:${index * 45}ms"><span class="cc-node-icon">${this.iconFor(device.kind)}</span><span><span class="cc-node-name">${this.escape(device.name)}</span><span class="cc-node-kind">${this.escape(device.kind)}</span><span class="cc-node-state"><i class="cc-dot"></i><span data-cc-state>${this.escape(device.status)}</span></span></span></button>`; }).join("");
+    return `<div class="cc-topology"><svg class="cc-svg" viewBox="0 0 100 100" aria-hidden="true">${links}</svg><div class="cc-core"><div><div class="cc-core-icon">◈</div><div class="cc-core-name">UniFi</div><div class="cc-core-meta">controller</div></div></div>${nodes}</div>`;
+  }
+
+  renderRoster(data) {
+    const rows = data.devices.map((device) => { const selected = device.id === this._selectedDevice ? " selected" : ""; return `<button class="cc-roster-row${selected}" data-cc-device="${this.escape(device.id)}"><span class="cc-roster-icon">${this.iconFor(device.kind)}</span><span><span class="cc-roster-name">${this.escape(device.name)}</span><span class="cc-roster-kind">${this.escape(device.kind)} · ${this.escape(device.model)}</span></span><i class="cc-roster-status ${device.status === "offline" ? "offline" : ""}"></i></button>`; }).join("");
+    return `<aside class="cc-roster"><div class="cc-section-head"><span class="cc-section-title">Node roster</span><span class="cc-section-meta">${data.devices.length}</span></div><div class="cc-roster-list">${rows || `<div class="cc-detail-sub">No nodes discovered</div>`}</div></aside>`;
+  }
+
+  renderCenterDetails(device) {
+    const actions = device.actions.map(({ entry }) => { const domain = entry.entity_id.split(".")[0]; const label = domain === "button" ? this.friendlyAction(entry) : `Toggle ${this.friendlyAction(entry)}`; return `<button class="cc-action" data-cc-action-domain="${domain}" data-cc-action-entity="${this.escape(entry.entity_id)}">${this.escape(label)}</button>`; }).join("");
+    const primary = device.metrics[0]?.value || "No optional telemetry";
+    return `<section class="cc-details"><div><div class="cc-detail-title">${this.escape(device.name)} · ${this.escape(device.status)}</div><div class="cc-detail-sub">${this.escape(device.model)} · ${this.escape(primary)}</div></div><div class="cc-actions">${actions || `<span class="cc-detail-sub">No exposed actions</span>`}</div></section>`;
+  }
+
+  updateCenterData(data) {
+    const total = data.devices.length;
+    const health = total ? Math.round((data.online / total) * 100) : 0;
+    const setText = (key, value) => { const el = this._root.querySelector(`[data-cc-bind="${key}"]`); if (el) el.textContent = value; };
+    setText("subtitle", total && data.online === total ? "All systems nominal" : total ? `${data.online}/${total} nodes online` : "Waiting for UniFi entities");
+    setText("live", data.online ? "LIVE" : "STANDBY");
+    setText("health", `${health}%`); setText("nodes", `${data.online} / ${total}`); setText("clients", this.formatNumber(data.clients)); setText("updates", data.updates ? `${data.updates} ready` : "Up to date"); setText("rx", this.rate(data.traffic.rx)); setText("tx", this.rate(data.traffic.tx)); setText("entity-count", `${data.entries.length} signals · local state`);
+    const healthRing = this._root.querySelector(".cc-health"); if (healthRing) healthRing.style.setProperty("--cc-health", `${health}%`);
+    const maxTraffic = Math.max(data.traffic.rx, data.traffic.tx, 1); for (const [key, value] of [["rx", data.traffic.rx], ["tx", data.traffic.tx]]) { const bar = this._root.querySelector(`[data-cc-bar="${key}"]`); if (bar) bar.style.width = `${Math.max(4, (value / maxTraffic) * 100)}%`; }
+    for (const device of data.devices) { this._root.querySelectorAll(`[data-cc-device="${this.escapeSelector(device.id)}"]`).forEach((node) => { node.classList.remove("online", "offline", "pending", "provisioning", "upgrading", "unknown"); node.classList.add(device.status); const state = node.querySelector("[data-cc-state]"); if (state) state.textContent = device.status; const dot = node.querySelector(".cc-roster-status"); if (dot) dot.classList.toggle("offline", device.status === "offline"); }); }
+  }
+
+  bindCenterEvents() {
+    this._root.querySelectorAll("[data-cc-device]").forEach((node) => node.addEventListener("click", () => { this._selectedDevice = node.dataset.ccDevice === this._selectedDevice ? null : node.dataset.ccDevice; this._centerSignature = null; this.render(); }));
+    this._root.querySelectorAll("[data-cc-action-entity]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); const entityId = button.dataset.ccActionEntity; const domain = button.dataset.ccActionDomain; if (this._hass?.callService && entityId) this._hass.callService(domain, domain === "button" ? "press" : "toggle", { entity_id: entityId }); }));
+    this._root.querySelector("[data-cc-clear]")?.addEventListener("click", () => { this._selectedDevice = null; this._centerSignature = null; this.render(); });
+  }
+}
+
 if (!customElements.get("unifi-orbit-card")) customElements.define("unifi-orbit-card", UnifiOrbitCard);
 if (!customElements.get("unifi-orbit-card-editor")) customElements.define("unifi-orbit-card-editor", UnifiOrbitCardEditor);
+if (!customElements.get("unifi-command-center-card")) customElements.define("unifi-command-center-card", UnifiCommandCenterCard);
 
-export { UnifiOrbitCard };
+export { UnifiOrbitCard, UnifiCommandCenterCard };
 
 window.customCards = window.customCards || [];
-if (!window.customCards.some((card) => card.type === "custom:unifi-orbit-card")) {
-  window.customCards.push({
+for (const card of [
+  {
     type: "custom:unifi-orbit-card",
     name: "UniFi Orbit Card",
     description: "Animated, auto-discovering UniFi Network observatory for Home Assistant.",
     preview: true,
-  });
+  },
+  {
+    type: "custom:unifi-command-center-card",
+    name: "UniFi Command Center",
+    description: "A complete animated UniFi Network command center with topology, health, traffic, and controls.",
+    preview: true,
+  },
+]) {
+  if (!window.customCards.some((existing) => existing.type === card.type)) window.customCards.push(card);
 }
